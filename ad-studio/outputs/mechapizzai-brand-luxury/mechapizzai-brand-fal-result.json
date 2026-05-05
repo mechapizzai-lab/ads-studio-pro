@@ -1,0 +1,13 @@
+{
+  "video": {
+    "url": "https://v3b.fal.media/files/b/0a990bab/Tbbx_4Yt6WpmWKAEV9rSk_video.mp4",
+    "content_type": "video/mp4",
+    "file_name": "video.mp4",
+    "file_size": 6702830
+  },
+  "seed": 1486167026,
+  "_storyboard_image_url": "https://v3b.fal.media/files/b/0a990b99/RwqbGyTdBCSwLiuk9yNwh_mechapizzai-brand-storyboard-board.png",
+  "_local_storyboard_path": "ad-studio\\outputs\\mechapizzai-brand-luxury\\assets\\mechapizzai-brand-storyboard-board.png",
+  "_local_prompt_path": "ad-studio\\outputs\\mechapizzai-brand-luxury\\mechapizzai-brand-seedance-r2v-prompt.md",
+  "_logs": []
+}
