@@ -143,3 +143,122 @@ If the user doesn't specify a duration, default to 15-20 seconds (a sweet spot f
 2. Generate the full four-section output: shot-by-shot timeline (8-12 shots), master effects inventory, density map, and energy arc
 3. Present in plain text in chat
 
+---
+
+## ⚙️ Seedance 2.0 API Reference — Generation Execution
+
+After producing the prompt, execute the generation using the fal.ai queue API.
+
+### Endpoint
+
+```
+POST https://queue.fal.run/bytedance/seedance-2.0/reference-to-video
+```
+
+### Authentication
+
+```
+Authorization: Key YOUR_FAL_KEY
+Content-Type: application/json
+```
+
+Set `FAL_KEY` as an environment variable. Never hardcode the key.
+
+### Input Parameters
+
+| Parameter | Type | Default | Constraints |
+|---|---|---|---|
+| `prompt` | string | — | **Required.** Text description for video generation. Reference images as `@Image1`, `@Image2`, etc. |
+| `image_urls` | list[string] | — | Up to 9 images, max 30 MB each. Public URLs or base64 data URIs. Referenced in prompt as `@Image1`, `@Image2`... |
+| `video_urls` | list[string] | — | Up to 3 videos (MP4/MOV), 2–15s combined, max 50 MB total, 480p–720p. Referenced as `@Video1`... |
+| `audio_urls` | list[string] | — | Up to 3 files (MP3/WAV), max 15s combined, 15 MB per file. Referenced as `@Audio1`... |
+| `resolution` | enum | `"720p"` | `"480p"`, `"720p"`, `"1080p"` |
+| `duration` | integer | `"auto"` | `"auto"` or integer **4–15** (seconds). Pass as **integer**, not string. |
+| `aspect_ratio` | enum | `"auto"` | `"auto"`, `"21:9"`, `"16:9"`, `"4:3"`, `"1:1"`, `"3:4"`, `"9:16"` |
+| `generate_audio` | boolean | `true` | Generates synchronized audio. **Default is true — never set to false unless the user explicitly opts out.** |
+| `seed` | integer | — | For reproducibility. Save the seed from each generation response. |
+| `end_user_id` | string | — | Optional unique user identifier. |
+
+### Critical rules — learned from production
+
+1. **`duration` must be an integer, not a string.** Pass `15`, not `"15"`. Passing a string causes a downstream service error.
+2. **`generate_audio` defaults to `true`.** Never set it to `false` — the pipeline always wants audio unless the user explicitly says otherwise.
+3. **Reference the storyboard image as `@Image1` in the prompt.** The `image_urls` array and `@Image1` reference work together — the image must be in `image_urls[0]` to be called `@Image1` in the prompt.
+4. **Prompt length matters.** Keep prompts under ~1000 characters. Overly long prompts cause downstream service errors. Describe each shot concisely.
+5. **Use the queue endpoint** (`queue.fal.run`), not `fal.run`, for generation — video takes 2–10 minutes.
+
+### Example request body
+
+```json
+{
+  "prompt": "Use @Image1 as the visual storyboard reference. Generate a 15-second cinematic ad...",
+  "image_urls": ["https://your-storyboard-image-url.png"],
+  "resolution": "1080p",
+  "duration": 15,
+  "aspect_ratio": "16:9",
+  "generate_audio": true
+}
+```
+
+### Queue workflow (PowerShell)
+
+```powershell
+$headers = @{ "Authorization" = "Key $env:FAL_KEY"; "Content-Type" = "application/json" }
+
+# 1. Submit job
+$response = Invoke-RestMethod -Uri "https://queue.fal.run/bytedance/seedance-2.0/reference-to-video" `
+    -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Compress) -ContentType "application/json"
+$requestId = $response.request_id
+
+# 2. Poll status (every 15s)
+$statusUrl = "https://queue.fal.run/bytedance/seedance-2.0/requests/$requestId/status"
+$resultUrl  = "https://queue.fal.run/bytedance/seedance-2.0/requests/$requestId"
+
+# 3. Fetch result when COMPLETED
+$result = Invoke-RestMethod -Uri $resultUrl -Headers $headers
+$videoUrl = $result.video.url   # Download URL
+$seed     = $result.seed        # Save for reproducibility
+```
+
+### Output format
+
+```json
+{
+  "video": {
+    "url": "https://...",
+    "content_type": "video/mp4",
+    "file_name": "video.mp4",
+    "file_size": 5162763
+  },
+  "seed": 410630861
+}
+```
+
+Save the `seed` from every generation in the project outputs alongside the video file. It allows regeneration with the same visual result.
+
+### File upload (for local storyboard images)
+
+If the storyboard image is local (not already hosted), upload it first:
+
+```javascript
+const url = await fal.storage.upload(file); // returns a public fal.media URL
+```
+
+In PowerShell, use the fal.ai storage API or host via any public CDN before passing to `image_urls`.
+
+### Text rendering limitation
+
+Seedance 2.0 does **not** reliably render readable text in generated video. For brand cards with logo and tagline (typically the final cut), the recommended approach is:
+
+1. Generate the video with the brand card described as a plain colored background (no text instruction).
+2. Generate the brand card as a separate GPT Image 2 image.
+3. Use ffmpeg to replace the last N seconds of the video with a static version of the brand card image:
+
+```bash
+ffmpeg -i video.mp4 -loop 1 -i brand-card.png \
+  -filter_complex "[0:v]trim=0:12,setpts=PTS-STARTPTS[v1]; \
+  [1:v]scale=1920:1080,trim=0:3,setpts=PTS-STARTPTS[v2]; \
+  [v1][v2]concat=n=2:v=1:a=0[vout]" \
+  -map "[vout]" -map 0:a? -c:v libx264 -c:a aac output-final.mp4
+```
+
