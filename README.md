@@ -130,7 +130,7 @@ cd ads-studio-pro
 
 ### Je te montre tout le pipeline en détail sur YouTube
 
-<a href="https://www.youtube.com/@MechaPizzAI">
+<a href="https://youtu.be/mYkszIL_Kqw">
   <img src="https://img.shields.io/badge/▶_S'ABONNER_POUR_NE_PAS_RATER_LE_TUTO-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube" height="55"/>
 </a>
 
